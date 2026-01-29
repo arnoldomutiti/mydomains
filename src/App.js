@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ExternalLink, Building2, User, Shield, Lock, ArrowLeft, Network, Moon, Sun, Globe, Search, Database, Clock, Zap, FileSearch, Bug, Plus, AlertCircle, Trash2, LayoutDashboard, Bell, Download } from 'lucide-react';
+import { ExternalLink, Building2, User, Shield, Lock, ArrowLeft, Network, Moon, Sun, Globe, Search, Database, Clock, Zap, FileSearch, Bug, Plus, AlertCircle, Trash2, LayoutDashboard, Bell, Download, Filter, ChevronDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import './App.css';
 
@@ -275,9 +275,33 @@ const INITIAL_DOMAINS = [
 ];
 
 // --- Notification Component ---
-function NotificationDropdown({ domains }) {
+function NotificationDropdown({ domains, isOpen: externalIsOpen, onToggle }) {
   const [isOpen, setIsOpen] = useState(false);
+
+  // Use external control if provided, otherwise use internal state
+  const actualIsOpen = externalIsOpen !== undefined ? externalIsOpen : isOpen;
+  const handleToggle = () => {
+    if (onToggle) {
+      onToggle();
+    } else {
+      setIsOpen(!isOpen);
+    }
+  };
   const [sslData, setSslData] = useState({});
+
+  // Top 50 cached domains to exclude from notifications
+  const TOP_50_DOMAINS = [
+    'google.com', 'youtube.com', 'facebook.com', 'twitter.com', 'instagram.com',
+    'linkedin.com', 'reddit.com', 'wikipedia.org', 'amazon.com', 'ebay.com',
+    'netflix.com', 'microsoft.com', 'apple.com', 'zoom.us', 'tiktok.com',
+    'whatsapp.com', 'pinterest.com', 'yahoo.com', 'twitch.tv', 'discord.com',
+    'github.com', 'stackoverflow.com', 'wordpress.com', 'tumblr.com', 'shopify.com',
+    'paypal.com', 'adobe.com', 'salesforce.com', 'dropbox.com', 'slack.com',
+    'medium.com', 'quora.com', 'vimeo.com', 'cloudflare.com', 'nvidia.com',
+    'spotify.com', 'airbnb.com', 'uber.com', 'booking.com', 'tripadvisor.com',
+    'expedia.com', 'yelp.com', 'imdb.com', 'cnn.com', 'bbc.com',
+    'nytimes.com', 'espn.com', 'walmart.com', 'target.com', 'bestbuy.com'
+  ];
 
   // Fetch SSL data for all domains when component mounts or domains change
   useEffect(() => {
@@ -303,6 +327,11 @@ function NotificationDropdown({ domains }) {
   }, [domains]);
 
   const notifications = domains.reduce((acc, domain) => {
+    // Skip top 50 cached domains
+    if (TOP_50_DOMAINS.includes(domain.name)) {
+      return acc;
+    }
+
     // Check domain expiry
     const expiryDateStr = domain.expires || domain.expiry_date;
     if (expiryDateStr && expiryDateStr !== 'N/A') {
@@ -359,9 +388,9 @@ function NotificationDropdown({ domains }) {
 
   return (
     <div className="notification-container">
-      <button 
-        className="notification-btn" 
-        onClick={() => setIsOpen(!isOpen)}
+      <button
+        className="notification-btn"
+        onClick={handleToggle}
         aria-label="Notifications"
       >
         <Bell size={20} />
@@ -370,11 +399,32 @@ function NotificationDropdown({ domains }) {
         )}
       </button>
 
-      {isOpen && (
+      {actualIsOpen && (
         <>
-            <div className="notification-overlay" onClick={() => setIsOpen(false)}></div>
+            <div className="notification-overlay" onClick={handleToggle}></div>
             <div className="notification-menu">
-            <div className="notification-header">Notifications</div>
+            <div className="notification-header">
+              <span>Notifications</span>
+              <button
+                onClick={handleToggle}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-main)',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  padding: '0',
+                  width: '1.5rem',
+                  height: '1.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginLeft: 'auto'
+                }}
+              >
+                &times;
+              </button>
+            </div>
             <div className="notification-list">
                 {notifications.length === 0 ? (
                     <div className="notification-empty">No new notifications</div>
@@ -809,18 +859,28 @@ function PageSpeedCard({ domain }) {
 }
 
 // --- Export/Import Dropdown ---
-function ExportDropdown({ domains, onImport, showModal }) {
+function ExportDropdown({ domains, onImport, showModal, isOpen: externalIsOpen, onToggle }) {
   const [isOpen, setIsOpen] = useState(false);
   const fileInputRef = useState(null);
 
+  // Use external control if provided, otherwise use internal state
+  const actualIsOpen = externalIsOpen !== undefined ? externalIsOpen : isOpen;
+  const handleToggle = () => {
+    if (onToggle) {
+      onToggle();
+    } else {
+      setIsOpen(!isOpen);
+    }
+  };
+
   const handleExportCSV = () => {
     exportToCSV(domains, showModal);
-    setIsOpen(false);
+    handleToggle();
   };
 
   const handleExportExcel = () => {
     exportToExcel(domains, showModal);
-    setIsOpen(false);
+    handleToggle();
   };
 
   const handleImport = async (event) => {
@@ -846,7 +906,7 @@ function ExportDropdown({ domains, onImport, showModal }) {
       }
 
       onImport(domains);
-      setIsOpen(false);
+      handleToggle();
     } catch (err) {
       console.error('Import error:', err);
       showModal('Import Error', 'Failed to import file: ' + err.message, 'error');
@@ -867,15 +927,15 @@ function ExportDropdown({ domains, onImport, showModal }) {
     <div className="export-dropdown-container">
       <button
         className="export-btn"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggle}
         aria-label="Export/Import domains"
       >
         <Download size={20} />
       </button>
 
-      {isOpen && (
+      {actualIsOpen && (
         <>
-          <div className="notification-overlay" onClick={() => setIsOpen(false)}></div>
+          <div className="notification-overlay" onClick={handleToggle}></div>
           <div className="dropdown-menu export-menu">
             <div className="dropdown-header">Import</div>
             <div className="dropdown-item" onClick={triggerFileInput}>
@@ -904,12 +964,29 @@ function ExportDropdown({ domains, onImport, showModal }) {
 }
 
 // --- User Profile Dropdown ---
-function UserDropdown({ user, onLogout, onOpenSettings }) {
+function UserDropdown({ user, onLogout, onOpenSettings, onOpenNotifications, onOpenExport, notificationCount, darkMode, onToggleDarkMode }) {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleSettingsClick = () => {
     setIsOpen(false);
     onOpenSettings();
+  };
+
+  const handleNotificationsClick = (e) => {
+    e.stopPropagation();
+    setIsOpen(false);
+    onOpenNotifications();
+  };
+
+  const handleExportClick = (e) => {
+    e.stopPropagation();
+    setIsOpen(false);
+    onOpenExport();
+  };
+
+  const handleDarkModeToggle = (e) => {
+    e.stopPropagation();
+    onToggleDarkMode();
   };
 
   return (
@@ -928,15 +1005,47 @@ function UserDropdown({ user, onLogout, onOpenSettings }) {
       </div>
 
       {isOpen && (
-        <div className="dropdown-menu">
-          <div className="dropdown-item" onClick={handleSettingsClick}>
-            <Bell size={16} style={{ marginRight: '8px' }} />
-            Notification Settings
+        <>
+          <div className="notification-overlay" onClick={() => setIsOpen(false)}></div>
+          <div className="dropdown-menu">
+            <div className="dropdown-item mobile-only-menu-item" onClick={handleNotificationsClick}>
+              <Bell size={16} style={{ marginRight: '8px' }} />
+              Notifications
+              {notificationCount > 0 && (
+                <span style={{
+                  marginLeft: 'auto',
+                  background: 'var(--danger-text)',
+                  color: 'white',
+                  borderRadius: '50%',
+                  width: '20px',
+                  height: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.7rem',
+                  fontWeight: '700'
+                }}>
+                  {notificationCount}
+                </span>
+              )}
+            </div>
+            <div className="dropdown-item mobile-only-menu-item" onClick={handleExportClick}>
+              <Download size={16} style={{ marginRight: '8px' }} />
+              Export/Import
+            </div>
+            <div className="dropdown-item mobile-only-menu-item" onClick={handleDarkModeToggle}>
+              {darkMode ? <Sun size={16} style={{ marginRight: '8px' }} /> : <Moon size={16} style={{ marginRight: '8px' }} />}
+              {darkMode ? 'Light Mode' : 'Dark Mode'}
+            </div>
+            <div className="dropdown-item" onClick={handleSettingsClick}>
+              <Bell size={16} style={{ marginRight: '8px' }} />
+              Notification Settings
+            </div>
+            <div className="dropdown-item" onClick={onLogout}>
+              Logout
+            </div>
           </div>
-          <div className="dropdown-item" onClick={onLogout}>
-            Logout
-          </div>
-        </div>
+        </>
       )}
     </div>
   );
@@ -948,6 +1057,8 @@ export default function App() {
   const [activeDomain, setActiveDomain] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showNotificationPreferences, setShowNotificationPreferences] = useState(false);
+  const [showMobileNotifications, setShowMobileNotifications] = useState(false);
+  const [showMobileExport, setShowMobileExport] = useState(false);
 
   // Initialize from localStorage or default to false
   const [darkMode, setDarkMode] = useState(() => {
@@ -956,6 +1067,16 @@ export default function App() {
   });
 
   const [domains, setDomains] = useState(INITIAL_DOMAINS);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Filter state
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterOptions, setFilterOptions] = useState({
+    expiryRange: 'all', // all, 30days, 60days, 90days, expired
+    sortBy: 'none', // none, registrar-asc, registrar-desc, expiry-asc, expiry-desc, ssl-expiry
+    sslExpiry: 'all' // all, expiring, valid, expired
+  });
+  const [sslDataCache, setSslDataCache] = useState({});
 
   // Modal state
   const [modal, setModal] = useState({
@@ -990,6 +1111,29 @@ export default function App() {
       fetchDomains();
     }
   }, [isAuthenticated, currentUser]);
+
+  // Fetch SSL data for all domains for filtering
+  useEffect(() => {
+    const fetchAllSSL = async () => {
+      const sslResults = {};
+      for (const domain of domains) {
+        try {
+          const res = await fetch(`http://localhost:5000/api/ssl/${domain.name}`);
+          const data = await res.json();
+          if (res.ok) {
+            sslResults[domain.name] = data;
+          }
+        } catch (err) {
+          // Silently fail for SSL checks
+        }
+      }
+      setSslDataCache(sslResults);
+    };
+
+    if (domains.length > 0) {
+      fetchAllSSL();
+    }
+  }, [domains]);
 
   const fetchDomains = async () => {
     try {
@@ -1158,6 +1302,146 @@ export default function App() {
     showModal('Import Complete', `Successfully imported: ${successCount}\nFailed: ${failCount}`, successCount > 0 ? 'success' : 'error');
   };
 
+  // Top 50 cached domains to exclude from notifications
+  const TOP_50_DOMAINS = [
+    'google.com', 'youtube.com', 'facebook.com', 'twitter.com', 'instagram.com',
+    'linkedin.com', 'reddit.com', 'wikipedia.org', 'amazon.com', 'ebay.com',
+    'netflix.com', 'microsoft.com', 'apple.com', 'zoom.us', 'tiktok.com',
+    'whatsapp.com', 'pinterest.com', 'yahoo.com', 'twitch.tv', 'discord.com',
+    'github.com', 'stackoverflow.com', 'wordpress.com', 'tumblr.com', 'shopify.com',
+    'paypal.com', 'adobe.com', 'salesforce.com', 'dropbox.com', 'slack.com',
+    'medium.com', 'quora.com', 'vimeo.com', 'cloudflare.com', 'nvidia.com',
+    'spotify.com', 'airbnb.com', 'uber.com', 'booking.com', 'tripadvisor.com',
+    'expedia.com', 'yelp.com', 'imdb.com', 'cnn.com', 'bbc.com',
+    'nytimes.com', 'espn.com', 'walmart.com', 'target.com', 'bestbuy.com'
+  ];
+
+  // Calculate notification count (excluding top 50 cached domains)
+  const notificationCount = domains.reduce((count, domain) => {
+    // Skip top 50 cached domains
+    if (TOP_50_DOMAINS.includes(domain.name)) {
+      return count;
+    }
+
+    const expiryDateStr = domain.expires || domain.expiry_date;
+    if (expiryDateStr && expiryDateStr !== 'N/A') {
+      const expiryDate = new Date(expiryDateStr);
+      const today = new Date();
+      const diffTime = expiryDate - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (domain.status === 'Expired' || diffDays < 0 || diffDays <= 30) {
+        count++;
+      }
+    }
+
+    const ssl = sslDataCache[domain.name];
+    if (ssl && ssl.valid) {
+      const daysRemaining = ssl.daysRemaining;
+      if (daysRemaining < 0 || daysRemaining <= 30) {
+        count++;
+      }
+    }
+
+    return count;
+  }, 0);
+
+  // Filter and sort domains based on search query and filter options
+  const filteredDomains = (() => {
+    // Step 1: Apply search query filter
+    let filtered = domains.filter(domain => {
+      if (!searchQuery.trim()) return true;
+
+      const query = searchQuery.toLowerCase();
+      return (
+        domain.name?.toLowerCase().includes(query) ||
+        domain.registrar?.toLowerCase().includes(query) ||
+        domain.status?.toLowerCase().includes(query)
+      );
+    });
+
+    // Step 2: Apply expiry range filter
+    if (filterOptions.expiryRange !== 'all') {
+      filtered = filtered.filter(domain => {
+        const expiryDateStr = domain.expires || domain.expiry_date;
+        if (!expiryDateStr || expiryDateStr === 'N/A') return false;
+
+        const expiryDate = new Date(expiryDateStr);
+        const today = new Date();
+        const diffTime = expiryDate - today;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        switch (filterOptions.expiryRange) {
+          case '30days':
+            return diffDays >= 0 && diffDays <= 30;
+          case '60days':
+            return diffDays >= 0 && diffDays <= 60;
+          case '90days':
+            return diffDays >= 0 && diffDays <= 90;
+          case 'expired':
+            return diffDays < 0 || domain.status === 'Expired';
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Step 3: Apply SSL expiry filter
+    if (filterOptions.sslExpiry !== 'all') {
+      filtered = filtered.filter(domain => {
+        const ssl = sslDataCache[domain.name];
+
+        if (!ssl) return filterOptions.sslExpiry === 'all';
+
+        const daysRemaining = ssl.daysRemaining;
+
+        switch (filterOptions.sslExpiry) {
+          case 'expiring':
+            return daysRemaining >= 0 && daysRemaining <= 30;
+          case 'valid':
+            return daysRemaining > 30;
+          case 'expired':
+            return daysRemaining < 0;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Step 4: Apply sorting
+    if (filterOptions.sortBy !== 'none') {
+      filtered = [...filtered].sort((a, b) => {
+        switch (filterOptions.sortBy) {
+          case 'registrar-asc':
+            return (a.registrar || '').localeCompare(b.registrar || '');
+          case 'registrar-desc':
+            return (b.registrar || '').localeCompare(a.registrar || '');
+          case 'expiry-asc': {
+            const dateA = new Date(a.expires || a.expiry_date || 0);
+            const dateB = new Date(b.expires || b.expiry_date || 0);
+            return dateA - dateB;
+          }
+          case 'expiry-desc': {
+            const dateA = new Date(a.expires || a.expiry_date || 0);
+            const dateB = new Date(b.expires || b.expiry_date || 0);
+            return dateB - dateA;
+          }
+          case 'ssl-expiry': {
+            const sslA = sslDataCache[a.name];
+            const sslB = sslDataCache[b.name];
+            const daysA = sslA ? sslA.daysRemaining : 999999;
+            const daysB = sslB ? sslB.daysRemaining : 999999;
+            return daysA - daysB;
+          }
+          default:
+            return 0;
+        }
+      });
+    }
+
+    return filtered;
+  })();
+
   if (!isAuthenticated) {
     return (
       <AuthPage
@@ -1173,12 +1457,142 @@ export default function App() {
     <div className={`app-container ${activeDomain ? 'view-detailed' : 'view-simple'}`}>
       {/* Top Navigation Bar */}
       <div className="top-nav">
-        <div className="nav-brand-placeholder"></div>
+        <div className="nav-brand">
+          <img src="/images/logo-secondary.png" alt="Domain Central" className="nav-logo" />
+        </div>
 
         <div className="nav-right">
-          <NotificationDropdown domains={domains} />
+          {/* Quick Add Button */}
+          {!activeDomain && (
+            <button
+              className="quick-add-btn"
+              onClick={handleAddDomain}
+              aria-label="Add new domain"
+              title="Add new domain"
+            >
+              <Plus size={18} />
+            </button>
+          )}
 
-          {!activeDomain && <ExportDropdown domains={domains} onImport={handleImportDomains} showModal={showModal} />}
+          {/* Search Bar */}
+          {!activeDomain && domains.length > 0 && (
+            <div className="top-search-bar">
+              <Search size={18} className="top-search-icon" />
+              <input
+                type="text"
+                placeholder="Search domains..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="top-search-input"
+              />
+              {searchQuery && (
+                <button
+                  className="top-search-clear"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Clear search"
+                >
+                  &times;
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Filter Button */}
+          {!activeDomain && domains.length > 0 && (
+            <div className="filter-container">
+              <button
+                className={`filter-btn ${(filterOptions.expiryRange !== 'all' || filterOptions.sortBy !== 'none' || filterOptions.sslExpiry !== 'all') ? 'filter-active' : ''}`}
+                onClick={() => setShowFilters(!showFilters)}
+                aria-label="Filter domains"
+                title="Filter and sort"
+              >
+                <Filter size={18} />
+              </button>
+
+              {showFilters && (
+                <>
+                  <div className="notification-overlay" onClick={() => setShowFilters(false)}></div>
+                  <div className="filter-dropdown">
+                    <div className="filter-section">
+                      <label className="filter-label">Domain Expiry</label>
+                      <select
+                        className="filter-select"
+                        value={filterOptions.expiryRange}
+                        onChange={(e) => setFilterOptions({ ...filterOptions, expiryRange: e.target.value })}
+                      >
+                        <option value="all">All Domains</option>
+                        <option value="30days">Expiring in 30 days</option>
+                        <option value="60days">Expiring in 60 days</option>
+                        <option value="90days">Expiring in 90 days</option>
+                        <option value="expired">Expired</option>
+                      </select>
+                    </div>
+
+                    <div className="filter-section">
+                      <label className="filter-label">SSL Certificate</label>
+                      <select
+                        className="filter-select"
+                        value={filterOptions.sslExpiry}
+                        onChange={(e) => setFilterOptions({ ...filterOptions, sslExpiry: e.target.value })}
+                      >
+                        <option value="all">All Certificates</option>
+                        <option value="expiring">Expiring in 30 days</option>
+                        <option value="valid">Valid (30+ days)</option>
+                        <option value="expired">Expired</option>
+                      </select>
+                    </div>
+
+                    <div className="filter-section">
+                      <label className="filter-label">Sort By</label>
+                      <select
+                        className="filter-select"
+                        value={filterOptions.sortBy}
+                        onChange={(e) => setFilterOptions({ ...filterOptions, sortBy: e.target.value })}
+                      >
+                        <option value="none">Default Order</option>
+                        <option value="registrar-asc">Registrar (A-Z)</option>
+                        <option value="registrar-desc">Registrar (Z-A)</option>
+                        <option value="expiry-asc">Expiry Date (Soonest)</option>
+                        <option value="expiry-desc">Expiry Date (Latest)</option>
+                        <option value="ssl-expiry">SSL Expiry (Soonest)</option>
+                      </select>
+                    </div>
+
+                    <div className="filter-actions">
+                      <button
+                        className="filter-reset-btn"
+                        onClick={() => {
+                          setFilterOptions({
+                            expiryRange: 'all',
+                            sortBy: 'none',
+                            sslExpiry: 'all'
+                          });
+                        }}
+                      >
+                        Reset Filters
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          <NotificationDropdown
+            domains={domains}
+            isOpen={showMobileNotifications}
+            onToggle={() => setShowMobileNotifications(!showMobileNotifications)}
+          />
+
+          {!activeDomain && (
+            <ExportDropdown
+              domains={domains}
+              onImport={handleImportDomains}
+              showModal={showModal}
+              isOpen={showMobileExport}
+              onToggle={() => setShowMobileExport(!showMobileExport)}
+            />
+          )}
 
           <button
             className="theme-toggle"
@@ -1192,6 +1606,11 @@ export default function App() {
             user={currentUser || {}}
             onLogout={handleLogout}
             onOpenSettings={() => setShowNotificationPreferences(true)}
+            onOpenNotifications={() => setShowMobileNotifications(!showMobileNotifications)}
+            onOpenExport={() => setShowMobileExport(!showMobileExport)}
+            notificationCount={notificationCount}
+            darkMode={darkMode}
+            onToggleDarkMode={() => setDarkMode(!darkMode)}
           />
         </div>
       </div>
@@ -1230,30 +1649,41 @@ export default function App() {
           </div>
         </>
       ) : (
-        /* Empty State or Dashboard Grid */
-        domains.length === 0 ? (
-          <EmptyState onAdd={handleAddDomain} />
-        ) : (
-          <div className="dashboard-grid">
-            {domains.map(domain => (
-              <SimpleCard
-                key={domain.id}
-                domain={domain}
-                onViewDetails={() => {
-                  setActiveDomain(domain);
-                  setShowAddModal(false);
-                }}
-                onDelete={() => handleDeleteDomain(domain.id)}
-              />
-            ))}
-            <div className="add-domain-card" onClick={handleAddDomain}>
-              <div className="add-domain-icon">
-                <Plus size={32} />
-              </div>
-              <span className="add-domain-text">Add New Domain</span>
+        <>
+          {/* Empty State or Dashboard Grid */}
+          {domains.length === 0 ? (
+            <EmptyState onAdd={handleAddDomain} />
+          ) : filteredDomains.length === 0 ? (
+            <div className="empty-search-state">
+              <Search size={48} style={{ color: 'var(--text-muted)', marginBottom: '1rem' }} />
+              <h3>No domains found</h3>
+              <p>No domains match your search "{searchQuery}"</p>
+              <button className="btn-secondary" onClick={() => setSearchQuery('')}>
+                Clear Search
+              </button>
             </div>
-          </div>
-        )
+          ) : (
+            <div className="dashboard-grid">
+              {filteredDomains.map(domain => (
+                <SimpleCard
+                  key={domain.id}
+                  domain={domain}
+                  onViewDetails={() => {
+                    setActiveDomain(domain);
+                    setShowAddModal(false);
+                  }}
+                  onDelete={() => handleDeleteDomain(domain.id)}
+                />
+              ))}
+              <div className="add-domain-card" onClick={handleAddDomain}>
+                <div className="add-domain-icon">
+                  <Plus size={32} />
+                </div>
+                <span className="add-domain-text">Add New Domain</span>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Add Domain Modal */}
@@ -1410,6 +1840,9 @@ function AuthPage({ onLogin, onRegister, darkMode, setDarkMode }) {
       </div>
 
       <div className={`auth-card ${isShaking ? 'shake' : ''}`}>
+        <div className="auth-logo-container">
+          <img src="/images/logo-primary.png" alt="Domain Central" className="auth-logo" />
+        </div>
         <div className="auth-header">
           <h1 className="auth-title">{isLogin ? 'Welcome Back' : 'Create Account'}</h1>
           <p className="auth-subtitle">
@@ -1581,19 +2014,30 @@ function AddDomainModal({ isOpen, onClose, onAddDomain, token, showModal }) {
 
         const saveRes = await fetch('http://localhost:5000/api/domains', {
             method: 'POST',
-            headers: { 
+            headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify(newDomain)
         });
 
-        if (!saveRes.ok) throw new Error("Database Save Failed");
+        if (!saveRes.ok) {
+          const errorData = await saveRes.json();
+          if (saveRes.status === 409) {
+            throw new Error("Domain already exists");
+          }
+          throw new Error(errorData.error || "Database Save Failed");
+        }
+
         const savedData = await saveRes.json();
-        
+
         onAddDomain({ ...newDomain, id: savedData.id, created: newDomain.created_date, expires: newDomain.expiry_date });
 
-        setLogs(prev => prev.map(l => l.name === domainName ? { name: domainName, status: 'Added successfully', type: 'success' } : l));
+        setLogs(prev => prev.map(l => l.name === domainName ? {
+          name: domainName,
+          status: 'Added successfully',
+          type: 'success'
+        } : l));
 
       } catch (err) {
         setLogs(prev => prev.map(l => l.name === domainName ? { name: domainName, status: err.message, type: 'error' } : l));
@@ -1737,15 +2181,81 @@ const getRegistrarWebsite = (registrarName) => {
 };
 
 // --- Helper for Logo ---
+const REGISTRAR_LOGO_MAP = {
+  // GoDaddy variations
+  'godaddy': '/images/registrars/Godaddy.png',
+  'godaddycom': '/images/registrars/Godaddy.png',
+  'godaddyllc': '/images/registrars/Godaddy.png',
+  'godaddydomains': '/images/registrars/Godaddy.png',
+
+  // Webhost Kenya (uses GoDaddy)
+  'webhostkenya': '/images/registrars/webhost-kenya.jpg',
+
+  // Namecheap variations
+  'namecheap': '/images/registrars/Namecheap.png',
+  'namecheapcom': '/images/registrars/Namecheap.png',
+
+  // Cloudflare variations
+  'cloudflare': '/images/registrars/Cloudflare Registrar.png',
+  'cloudflareregistrar': '/images/registrars/Cloudflare Registrar.png',
+  'cloudflareinc': '/images/registrars/Cloudflare Registrar.png',
+
+  // Gandi variations
+  'gandi': '/images/registrars/Gandi.net.png',
+  'gandinet': '/images/registrars/Gandi.net.png',
+  'gandisas': '/images/registrars/Gandi.net.png',
+
+  // Name.com variations
+  'namecom': '/images/registrars/Name.com',
+  'namecominc': '/images/registrars/Name.com',
+
+  // Hostinger variations
+  'hostinger': '/images/registrars/hostinger.png',
+  'hostingerinternationalsro': '/images/registrars/hostinger.png',
+  'hostingerinternational': '/images/registrars/hostinger.png',
+
+  // Network Solutions variations
+  'networksolutions': '/images/registrars/network-solutions.jpg',
+  'networksolutionsllc': '/images/registrars/network-solutions.jpg',
+
+  // Wix variations
+  'wix': '/images/registrars/wix.png',
+  'wixcom': '/images/registrars/wix.png',
+  'wixcomltd': '/images/registrars/wix.png',
+
+  // Dimension Data variations
+  'dimensiondata': '/images/registrars/dimension-data.png',
+  'dimensiondataptyltd': '/images/registrars/dimension-data.png',
+  'dimensiondatasolutionseastafrica': '/images/registrars/dimension-data.png',
+
+  // Safaricom variations
+  'safaricom': '/images/registrars/safaricom.jpg',
+  'safaricomlimited': '/images/registrars/safaricom.jpg',
+  'safaricomltd': '/images/registrars/safaricom.jpg'
+};
+
 const getRegistrarLogoUrl = (name) => {
   if (!name || name === "Unknown") return null;
+
   // Clean name: remove Inc, LLC, Ltd, etc.
-  const cleanName = name.replace(/,? (Inc|LLC|Ltd|Corp|GmbH|B\.V\.|S\.A\.|S\.R\.L\.|Pvt|Public Limited Company)\.?$/i, '')
+  const cleanName = name.replace(/,? (Inc|LLC|Ltd|Corp|GmbH|B\.V\.|S\.A\.|S\.R\.L\.|Pvt|Public Limited Company|S\.L\.)\.?$/i, '')
     .replace(/[.,]/g, '')
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ''); // Remove all remaining spaces
 
+  // Debug: log cleaned name to help identify registrars
+  console.log(`Registrar: "${name}" → Cleaned: "${cleanName}"`);
+
+  // Check if we have a local logo
+  const localLogo = REGISTRAR_LOGO_MAP[cleanName];
+  if (localLogo) {
+    console.log(`✓ Using local logo for: ${cleanName}`);
+    return localLogo;
+  }
+
+  console.log(`⚠ No local logo for: ${cleanName}, using fallback`);
+  // Fallback to external logo service
   return `https://img.logo.dev/${cleanName}.com?token=pk_X-bjM4U5QeeTFlMqueWvHQ`;
 };
 
@@ -1763,20 +2273,19 @@ function SimpleCard({ domain, onViewDetails, onDelete }) {
         >
           <h2 className="domain-name">{domain.name}</h2>
         </a>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <div className="status-badge" style={domain.status === 'Expired' ? { backgroundColor: 'var(--danger-bg)' } : {}}>
-            <div className="status-dot" style={domain.status === 'Expired' ? { backgroundColor: 'var(--danger-text)' } : {}}></div>
-            <span className="status-text" style={domain.status === 'Expired' ? { color: 'var(--danger-text)' } : {}}>{domain.status}</span>
-          </div>
-          <button
-            className="icon-btn delete-icon-btn"
-            onClick={onDelete}
-            aria-label="Delete domain"
-            title="Delete domain"
-          >
-            <Trash2 size={16} />
-          </button>
+        <div className="status-badge" style={domain.status === 'Expired' ? { backgroundColor: 'var(--danger-bg)' } : {}}>
+          <div className="status-dot" style={domain.status === 'Expired' ? { backgroundColor: 'var(--danger-text)' } : {}}></div>
+          <span className="status-text" style={domain.status === 'Expired' ? { color: 'var(--danger-text)' } : {}}>{domain.status}</span>
         </div>
+        <button
+          className="icon-btn delete-icon-btn"
+          onClick={onDelete}
+          aria-label="Delete domain"
+          title="Delete domain"
+          style={{ marginLeft: 'auto' }}
+        >
+          <Trash2 size={16} />
+        </button>
       </div>
 
       <div className="info-grid">
@@ -1876,6 +2385,11 @@ function DetailedDashboard({ domain, onBack }) {
 
   return (
     <div className="details-container">
+      {/* Logo at the top */}
+      <div className="details-logo-container">
+        <img src="/images/logo-secondary.png" alt="Domain Central" className="details-logo" />
+      </div>
+
       <button className="back-button" onClick={onBack}>
         <ArrowLeft size={16} />
         Back to Dashboard

@@ -10,6 +10,7 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
 const cron = require('node-cron');
 const { sendEmailNotification, sendSMSNotification, generateDomainExpiryEmail, generateSSLExpiryEmail } = require('./notificationService');
+const { isDomainCached, getCachedDomain, refreshDomainCache, getAllCachedDomains, shouldRefreshCache, TOP_50_DOMAINS } = require('./domainCache');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -184,24 +185,38 @@ app.get('/api/domains', authenticateToken, (req, res) => {
 // Save a Domain
 app.post('/api/domains', authenticateToken, (req, res) => {
     const { name, created_date, expiry_date, registrar, status, fullDetails } = req.body;
-    
-    const sql = `INSERT INTO domains (user_id, name, created_date, expiry_date, registrar, status, full_details) VALUES (?, ?, ?, ?, ?, ?, ?)`;
-    const params = [
-        req.user.id, 
-        name, 
-        created_date, 
-        expiry_date, 
-        registrar, 
-        status, 
-        JSON.stringify(fullDetails)
-    ];
 
-    db.run(sql, params, function(err) {
+    // Check if domain already exists for this user
+    const checkSql = `SELECT id FROM domains WHERE user_id = ? AND name = ?`;
+    db.get(checkSql, [req.user.id, name], (err, existing) => {
         if (err) {
-            console.error(err);
-            return res.status(500).json({ error: "Failed to save domain" });
+            console.error('Error checking for duplicate:', err);
+            return res.status(500).json({ error: 'Database error' });
         }
-        res.json({ id: this.lastID, message: "Domain saved" });
+
+        if (existing) {
+            return res.status(409).json({ error: 'Domain already exists', domainId: existing.id });
+        }
+
+        // Insert the new domain
+        const sql = `INSERT INTO domains (user_id, name, created_date, expiry_date, registrar, status, full_details) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+        const params = [
+            req.user.id,
+            name,
+            created_date,
+            expiry_date,
+            registrar,
+            status,
+            JSON.stringify(fullDetails)
+        ];
+
+        db.run(sql, params, function(err) {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ error: "Failed to save domain" });
+            }
+            res.json({ id: this.lastID, message: "Domain saved" });
+        });
     });
 });
 
@@ -222,14 +237,30 @@ app.get('/api/whois/:domain', async (req, res) => {
         return res.status(400).json({ error: 'Domain is required' });
     }
 
+    // Check if domain is in the top 50 and return cached data
+    try {
+        const cachedDomain = await getCachedDomain(domain);
+        if (cachedDomain) {
+            console.log(`📦 Serving cached data for ${domain}`);
+            const fullDetails = JSON.parse(cachedDomain.full_details);
+            return res.json({
+                ...fullDetails,
+                cached: true,
+                last_updated: cachedDomain.last_updated
+            });
+        }
+    } catch (error) {
+        console.error('Error checking cache:', error);
+    }
+
+    // If not cached, fetch from API
     if (!WHOXY_API_KEY) {
         console.error('[Config Error] WHOXY_API_KEY is missing from .env');
         return res.status(500).json({ error: 'Server configuration error: API Key missing' });
     }
 
-    // console.log(`[Debug] Using Key: ${WHOXY_API_KEY.substring(0, 4)}...`);
-
     try {
+        console.log(`🌐 Fetching fresh data for ${domain}`);
         const url = `http://api.whoxy.com/?key=${WHOXY_API_KEY}&whois=${domain}`;
         const response = await axios.get(url);
 
@@ -428,6 +459,11 @@ cron.schedule('0 9 * * *', async () => {
                 const https = require('https');
 
                 for (const domain of domains) {
+                    // Skip top 50 cached domains from notifications
+                    if (TOP_50_DOMAINS.includes(domain.name)) {
+                        continue;
+                    }
+
                     // Check domain expiry
                     if (domain.expiry_date && domain.expiry_date !== 'N/A') {
                         const expiryDate = new Date(domain.expiry_date);
@@ -517,7 +553,108 @@ cron.schedule('0 9 * * *', async () => {
     });
 });
 
+// === Domain Cache Management ===
+
+// Get all cached domains (admin/debug endpoint)
+app.get('/api/cached-domains', async (req, res) => {
+    try {
+        const cachedDomains = await getAllCachedDomains();
+        res.json({
+            count: cachedDomains.length,
+            domains: cachedDomains.map(d => ({
+                name: d.name,
+                registrar: d.registrar,
+                expiry_date: d.expiry_date,
+                last_updated: d.last_updated
+            }))
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch cached domains' });
+    }
+});
+
+// Manual cache refresh endpoint (admin only)
+app.post('/api/refresh-cache', async (req, res) => {
+    if (!WHOXY_API_KEY) {
+        return res.status(500).json({ error: 'API key not configured' });
+    }
+
+    try {
+        console.log('🔄 Manual cache refresh initiated...');
+        const result = await refreshDomainCache(WHOXY_API_KEY);
+        res.json({
+            message: 'Cache refresh completed',
+            ...result
+        });
+    } catch (error) {
+        console.error('Cache refresh error:', error);
+        res.status(500).json({ error: 'Failed to refresh cache' });
+    }
+});
+
+// Check if specific domain is cached
+app.get('/api/is-cached/:domain', async (req, res) => {
+    try {
+        const cachedDomain = await getCachedDomain(req.params.domain);
+        res.json({
+            domain: req.params.domain,
+            cached: !!cachedDomain,
+            isTopDomain: TOP_50_DOMAINS.includes(req.params.domain),
+            lastUpdated: cachedDomain ? cachedDomain.last_updated : null
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to check cache' });
+    }
+});
+
+// === Cron Jobs ===
+
+// Daily cache refresh at 8:00 AM
+cron.schedule('0 8 * * *', async () => {
+    console.log('\n⏰ [Cron] Starting scheduled cache refresh at 8:00 AM...');
+
+    if (!WHOXY_API_KEY) {
+        console.error('❌ Cannot refresh cache: API key not configured');
+        return;
+    }
+
+    try {
+        const needsRefresh = await shouldRefreshCache();
+        if (needsRefresh) {
+            const result = await refreshDomainCache(WHOXY_API_KEY);
+            console.log(`✅ [Cron] Cache refresh completed: ${result.successCount} successful, ${result.failCount} failed`);
+        } else {
+            console.log('ℹ️  [Cron] Cache is still fresh, skipping refresh');
+        }
+    } catch (error) {
+        console.error('❌ [Cron] Cache refresh failed:', error);
+    }
+});
+
+// Initial cache check on server start
+(async () => {
+    if (WHOXY_API_KEY) {
+        try {
+            const needsRefresh = await shouldRefreshCache();
+            if (needsRefresh) {
+                console.log('\n🚀 Initializing domain cache on server start...');
+                console.log('⚠️  This may take a few minutes for 50 domains...\n');
+                const result = await refreshDomainCache(WHOXY_API_KEY);
+                console.log(`\n✅ Initial cache setup completed: ${result.successCount} successful, ${result.failCount} failed\n`);
+            } else {
+                console.log('✅ Domain cache is already up to date');
+            }
+        } catch (error) {
+            console.error('❌ Error during initial cache setup:', error);
+        }
+    } else {
+        console.warn('⚠️  WHOXY_API_KEY not configured - domain cache will not be available');
+    }
+})();
+
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log('[Cron] Daily notification job scheduled for 9 AM');
+    console.log(`\n🚀 Server running on port ${PORT}`);
+    console.log('📅 [Cron] Daily notification job scheduled for 9:00 AM');
+    console.log('📅 [Cron] Daily cache refresh scheduled for 8:00 AM');
+    console.log(`📦 Top ${TOP_50_DOMAINS.length} domains will be cached for instant access\n`);
 });

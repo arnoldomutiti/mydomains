@@ -39,6 +39,25 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 console.log("Domains table ready.");
             }
         });
+
+        // Create Cached Domains Table (for top 50 websites)
+        db.run(`CREATE TABLE IF NOT EXISTS cached_domains (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE,
+            created_date TEXT,
+            expiry_date TEXT,
+            registrar TEXT,
+            status TEXT,
+            full_details TEXT,
+            last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(name)
+        )`, (err) => {
+            if (err) {
+                console.error("Error creating cached_domains table:", err.message);
+            } else {
+                console.log("Cached domains table ready.");
+            }
+        });
     }
 });
 

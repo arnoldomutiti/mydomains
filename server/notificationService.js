@@ -3,8 +3,24 @@ const twilio = require('twilio');
 
 // Email transporter configuration
 const createEmailTransporter = () => {
-  return nodemailer.createTransporter({
-    service: process.env.EMAIL_SERVICE || 'gmail',
+  const emailService = process.env.EMAIL_SERVICE || 'gmail';
+
+  // Zoho Mail requires custom SMTP configuration
+  if (emailService.toLowerCase() === 'zoho') {
+    return nodemailer.createTransport({
+      host: process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com',
+      port: parseInt(process.env.ZOHO_SMTP_PORT) || 465,
+      secure: true, // use SSL
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD
+      }
+    });
+  }
+
+  // Default configuration for other services (Gmail, Outlook, etc.)
+  return nodemailer.createTransport({
+    service: emailService,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASSWORD

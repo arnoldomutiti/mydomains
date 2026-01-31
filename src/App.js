@@ -1060,10 +1060,21 @@ export default function App() {
   const [showMobileNotifications, setShowMobileNotifications] = useState(false);
   const [showMobileExport, setShowMobileExport] = useState(false);
 
-  // Initialize from localStorage or default to false
+  // Initialize from localStorage or system preference
   const [darkMode, setDarkMode] = useState(() => {
     const savedTheme = localStorage.getItem('theme');
-    return savedTheme === 'dark';
+
+    // If user has manually set a preference, use that
+    if (savedTheme) {
+      return savedTheme === 'dark';
+    }
+
+    // Otherwise, detect system preference
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return true; // System prefers dark mode
+    }
+
+    return false; // Default to light mode
   });
 
   const [domains, setDomains] = useState(INITIAL_DOMAINS);
@@ -1167,8 +1178,46 @@ export default function App() {
     }
   }, [darkMode]);
 
+  // Listen for system theme changes (only if user hasn't set manual preference)
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const handleThemeChange = (e) => {
+      const savedTheme = localStorage.getItem('theme');
+
+      // Only auto-update if user hasn't manually set a preference
+      if (!savedTheme) {
+        setDarkMode(e.matches);
+      }
+    };
+
+    // Modern browsers
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handleThemeChange);
+      return () => mediaQuery.removeEventListener('change', handleThemeChange);
+    }
+    // Older browsers
+    else if (mediaQuery.addListener) {
+      mediaQuery.addListener(handleThemeChange);
+      return () => mediaQuery.removeListener(handleThemeChange);
+    }
+  }, []);
+
   // Handle Login Logic
-  const handleLoginObj = async (email, password) => {
+  const handleLoginObj = async (emailOrObj, password) => {
+    // Check if called with object (for OAuth/Demo) or email+password
+    if (typeof emailOrObj === 'object' && emailOrObj.token) {
+      // OAuth or Demo login - already has token and user
+      const { token, user } = emailOrObj;
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      setIsAuthenticated(true);
+      setCurrentUser(user);
+      return { success: true };
+    }
+
+    // Regular login with email and password
+    const email = emailOrObj;
     try {
       const res = await fetch('http://localhost:5000/api/login', {
         method: 'POST',
@@ -1176,7 +1225,7 @@ export default function App() {
         body: JSON.stringify({ email, password })
       });
       const data = await res.json();
-      
+
       if (res.ok) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
@@ -1457,8 +1506,8 @@ export default function App() {
     <div className={`app-container ${activeDomain ? 'view-detailed' : 'view-simple'}`}>
       {/* Top Navigation Bar */}
       <div className="top-nav">
-        <div className="nav-brand">
-          <img src="/images/logo-secondary.png" alt="Domain Central" className="nav-logo" />
+        <div className="nav-brand" onClick={() => setActiveDomain(null)} style={{ cursor: 'pointer' }}>
+          <img src="/images/domain-dashboard-primary-logo.png" alt="Domain Central" className="nav-logo" />
         </div>
 
         <div className="nav-right">
@@ -1755,6 +1804,9 @@ function AuthPage({ onLogin, onRegister, darkMode, setDarkMode }) {
   const [errors, setErrors] = useState({});
   const [isShaking, setIsShaking] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false); // For registration success
+  const [showOTPInput, setShowOTPInput] = useState(false); // For OTP verification step
+  const [otp, setOtp] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
 
   // Reset state on toggle
   useEffect(() => {
@@ -1814,15 +1866,130 @@ function AuthPage({ onLogin, onRegister, darkMode, setDarkMode }) {
         setTimeout(() => setIsShaking(false), 400);
       }
     } else {
-      const result = await onRegister(formData.name, formData.email, formData.password);
-      if (result && result.error) {
-         setErrors({ form: result.error });
-         setIsShaking(true);
-         setTimeout(() => setIsShaking(false), 400);
-      } else if (result && result.success) {
-        setShowConfetti(true);
-        setTimeout(() => setShowConfetti(false), 2000); // Hide confetti after 2 seconds
+      // Registration: Send OTP first
+      try {
+        const response = await fetch('http://localhost:5000/api/send-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: formData.name,
+            email: formData.email,
+            password: formData.password
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          setShowOTPInput(true);
+          setErrors({});
+        } else {
+          setErrors({ form: data.error || 'Failed to send OTP' });
+          setIsShaking(true);
+          setTimeout(() => setIsShaking(false), 400);
+        }
+      } catch (error) {
+        setErrors({ form: 'Network error. Please try again.' });
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 400);
       }
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!otp || otp.length !== 6) {
+      setErrors({ otp: 'Please enter a valid 6-digit OTP' });
+      setIsShaking(true);
+      setTimeout(() => setIsShaking(false), 400);
+      return;
+    }
+
+    setIsVerifying(true);
+    setErrors({});
+
+    try {
+      const response = await fetch('http://localhost:5000/api/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formData.email,
+          otp: otp
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // OTP verified, account created
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+
+        setShowConfetti(true);
+        setTimeout(() => {
+          onLogin({ token: data.token, user: data.user });
+        }, 1000);
+      } else {
+        setErrors({ otp: data.error || 'Invalid OTP' });
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 400);
+      }
+    } catch (error) {
+      setErrors({ otp: 'Network error. Please try again.' });
+      setIsShaking(true);
+      setTimeout(() => setIsShaking(false), 400);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setOtp('');
+        setErrors({ otp: '', form: '', success: 'OTP resent successfully!' });
+        setTimeout(() => setErrors({}), 3000);
+      } else {
+        setErrors({ form: data.error || 'Failed to resend OTP' });
+      }
+    } catch (error) {
+      setErrors({ form: 'Network error. Please try again.' });
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/demo-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Store auth data
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+
+        // Call the login handler
+        onLogin({ token: data.token, user: data.user });
+      } else {
+        setErrors({ form: data.error || 'Demo login failed' });
+      }
+    } catch (error) {
+      console.error('Demo login error:', error);
+      setErrors({ form: 'Network error. Please try again.' });
     }
   };
 
@@ -1841,22 +2008,121 @@ function AuthPage({ onLogin, onRegister, darkMode, setDarkMode }) {
 
       <div className={`auth-card ${isShaking ? 'shake' : ''}`}>
         <div className="auth-logo-container">
-          <img src="/images/logo-primary.png" alt="Domain Central" className="auth-logo" />
-        </div>
-        <div className="auth-header">
-          <h1 className="auth-title">{isLogin ? 'Welcome Back' : 'Create Account'}</h1>
-          <p className="auth-subtitle">
-            {isLogin ? 'Enter your credentials to access your domains' : 'Sign up to start managing your digital assets'}
-          </p>
+          <img src="/images/domain-dashboard-primary-logo.png" alt="Domain Central" className="auth-logo" />
         </div>
 
-        {errors.form && (
-          <div className="error-message" style={{ justifyContent: 'center', marginBottom: '1rem' }}>
-            <AlertCircle size={14} /> {errors.form}
-          </div>
-        )}
+        {showOTPInput ? (
+          // OTP Verification Screen
+          <>
+            <div className="auth-header">
+              <h1 className="auth-title">📧 Verify Your Email</h1>
+              <p className="auth-subtitle">
+                We've sent a 6-digit code to <strong>{formData.email}</strong>
+              </p>
+            </div>
 
-        <div className="auth-form">
+            {errors.success && (
+              <div className="success-message" style={{ justifyContent: 'center', marginBottom: '1rem', color: 'var(--success-post)' }}>
+                ✓ {errors.success}
+              </div>
+            )}
+
+            {errors.otp && (
+              <div className="error-message" style={{ justifyContent: 'center', marginBottom: '1rem' }}>
+                <AlertCircle size={14} /> {errors.otp}
+              </div>
+            )}
+
+            <div className="auth-form">
+              <div className="input-group">
+                <label className="input-label">Enter OTP Code</label>
+                <input
+                  type="text"
+                  className={`auth-input otp-input ${errors.otp ? 'input-error' : ''}`}
+                  placeholder="000000"
+                  value={otp}
+                  maxLength={6}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                  onKeyPress={(e) => e.key === 'Enter' && handleVerifyOTP()}
+                  style={{ textAlign: 'center', fontSize: '1.5rem', letterSpacing: '0.5rem' }}
+                />
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                  Code expires in 10 minutes
+                </p>
+              </div>
+
+              <button
+                className="primary-btn"
+                onClick={handleVerifyOTP}
+                disabled={isVerifying || otp.length !== 6}
+              >
+                {isVerifying ? 'Verifying...' : 'Verify & Create Account'}
+              </button>
+
+              <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+                <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                  Didn't receive the code?{' '}
+                </span>
+                <button
+                  onClick={handleResendOTP}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent-color)',
+                    fontSize: '0.875rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  Resend OTP
+                </button>
+              </div>
+
+              <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+                <button
+                  onClick={() => {
+                    setShowOTPInput(false);
+                    setOtp('');
+                    setErrors({});
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-secondary)',
+                    fontSize: '0.875rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ← Back to registration
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          // Login/Register Form
+          <>
+            <div className="auth-header">
+              <h1 className="auth-title">{isLogin ? 'Welcome Back' : 'Create Account'}</h1>
+              <p className="auth-subtitle">
+                {isLogin ? 'Enter your credentials to access your domains' : 'Sign up to start managing your digital assets'}
+              </p>
+            </div>
+
+            {errors.form && (
+              <div className="error-message" style={{ justifyContent: 'center', marginBottom: '1rem' }}>
+                <AlertCircle size={14} /> {errors.form}
+              </div>
+            )}
+
+            <div className="auth-form">
+          <button className="demo-btn" onClick={handleDemoLogin}>
+            <LayoutDashboard size={20} />
+            Try Demo (No Signup Required)
+          </button>
+
+          <div className="divider">or sign in with</div>
+
           <button className="social-btn" onClick={() => window.location.href = 'http://localhost:5000/api/auth/google'}>
              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -1867,7 +2133,7 @@ function AuthPage({ onLogin, onRegister, darkMode, setDarkMode }) {
             Continue with Google
           </button>
 
-          <div className="divider">or</div>
+          <div className="divider">or use email</div>
 
           {!isLogin && (
             <div className="input-group">
@@ -1922,6 +2188,8 @@ function AuthPage({ onLogin, onRegister, darkMode, setDarkMode }) {
             {isLogin ? 'Sign Up' : 'Log In'}
           </span>
         </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -2386,8 +2654,8 @@ function DetailedDashboard({ domain, onBack }) {
   return (
     <div className="details-container">
       {/* Logo at the top */}
-      <div className="details-logo-container">
-        <img src="/images/logo-secondary.png" alt="Domain Central" className="details-logo" />
+      <div className="details-logo-container" onClick={onBack} style={{ cursor: 'pointer' }}>
+        <img src="/images/domain-dashboard-primary-logo.png" alt="Domain Central" className="details-logo" />
       </div>
 
       <button className="back-button" onClick={onBack}>

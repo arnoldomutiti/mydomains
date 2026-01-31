@@ -58,8 +58,11 @@ passport.use(new GoogleStrategy({
     callbackURL: "http://localhost:5000/api/auth/google/callback"
   },
   (accessToken, refreshToken, profile, done) => {
+    // Normalize email to lowercase for case-insensitive lookup
+    const normalizedEmail = profile.emails[0].value.toLowerCase().trim();
+
     // Check if user exists
-    db.get('SELECT * FROM users WHERE email = ?', [profile.emails[0].value], (err, user) => {
+    db.get('SELECT * FROM users WHERE email = ?', [normalizedEmail], (err, user) => {
       if (err) return done(err);
 
       if (user) {
@@ -67,7 +70,7 @@ passport.use(new GoogleStrategy({
         return done(null, user);
       } else {
         // Create new user
-        const email = profile.emails[0].value;
+        const email = normalizedEmail;
         const name = profile.displayName;
 
         db.run(
@@ -86,6 +89,26 @@ passport.use(new GoogleStrategy({
   }
 ));
 
+// === OTP Storage and Helper Functions ===
+// In-memory OTP storage (email -> {otp, userData, expiresAt})
+const otpStore = new Map();
+
+// Generate 6-digit OTP
+function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Clean expired OTPs every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [email, data] of otpStore.entries()) {
+    if (data.expiresAt < now) {
+      otpStore.delete(email);
+      console.log(`[OTP] Expired OTP removed for: ${email}`);
+    }
+  }
+}, 5 * 60 * 1000);
+
 // === Auth Endpoints ===
 
 // Register
@@ -95,10 +118,13 @@ app.post('/api/register', (req, res) => {
         return res.status(400).json({ error: "Missing fields" });
     }
 
+    // Normalize email to lowercase for case-insensitive storage
+    const normalizedEmail = email.toLowerCase().trim();
+
     const hashedPassword = bcrypt.hashSync(password, 8);
 
     const sql = `INSERT INTO users (name, email, password) VALUES (?, ?, ?)`;
-    db.run(sql, [name, email, hashedPassword], function (err) {
+    db.run(sql, [name, normalizedEmail, hashedPassword], function (err) {
         if (err) {
             console.error(err.message);
             if (err.message.includes('UNIQUE constraint failed')) {
@@ -118,8 +144,11 @@ app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: "Missing fields" });
 
+    // Normalize email to lowercase for case-insensitive lookup
+    const normalizedEmail = email.toLowerCase().trim();
+
     const sql = `SELECT * FROM users WHERE email = ?`;
-    db.get(sql, [email], (err, user) => {
+    db.get(sql, [normalizedEmail], (err, user) => {
         if (err) return res.status(500).json({ error: "Server error" });
         if (!user) return res.status(404).json({ error: "User not found" });
 
@@ -128,6 +157,175 @@ app.post('/api/login', (req, res) => {
 
         const token = jwt.sign({ id: user.id, email: user.email }, SECRET_KEY, { expiresIn: '24h' });
         res.json({ message: "Login successful", token, user: { name: user.name, email: user.email } });
+    });
+});
+
+// Demo Account Login
+app.post('/api/demo-login', (req, res) => {
+    // Create a demo user token (user ID = -1 for demo)
+    const demoUser = {
+        id: -1,
+        name: 'Demo User',
+        email: 'demo@domaincentral.com'
+    };
+
+    const token = jwt.sign(
+        { id: demoUser.id, email: demoUser.email, isDemo: true },
+        SECRET_KEY,
+        { expiresIn: '24h' }
+    );
+
+    res.json({
+        message: "Demo login successful",
+        token,
+        user: { name: demoUser.name, email: demoUser.email }
+    });
+});
+
+// Send OTP for email verification
+app.post('/api/send-otp', async (req, res) => {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+        return res.status(400).json({ error: "Missing fields" });
+    }
+
+    // Normalize email
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check if email already exists
+    db.get('SELECT id FROM users WHERE email = ?', [normalizedEmail], async (err, existingUser) => {
+        if (err) {
+            return res.status(500).json({ error: "Database error" });
+        }
+
+        if (existingUser) {
+            return res.status(400).json({ error: "Email already exists" });
+        }
+
+        // Generate OTP
+        const otp = generateOTP();
+        const expiresAt = Date.now() + (10 * 60 * 1000); // 10 minutes
+
+        // Store OTP with user data
+        otpStore.set(normalizedEmail, {
+            otp,
+            userData: { name, email: normalizedEmail, password },
+            expiresAt
+        });
+
+        // Send OTP email
+        const emailHTML = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: linear-gradient(135deg, #0F766E, #0D9488); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+                    .otp-box { background: white; border: 2px dashed #0F766E; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px; }
+                    .otp-code { font-size: 32px; font-weight: bold; color: #0F766E; letter-spacing: 8px; }
+                    .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>🔐 Email Verification</h1>
+                    </div>
+                    <div class="content">
+                        <h2>Hello ${name}!</h2>
+                        <p>Thank you for signing up for Domain Dashboard. To complete your registration, please verify your email address.</p>
+
+                        <div class="otp-box">
+                            <p style="margin: 0; font-size: 14px; color: #666;">Your verification code is:</p>
+                            <div class="otp-code">${otp}</div>
+                            <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">This code will expire in 10 minutes</p>
+                        </div>
+
+                        <p>If you didn't request this code, please ignore this email.</p>
+
+                        <div class="footer">
+                            <p>© ${new Date().getFullYear()} Domain Dashboard - Your unified Domain management system</p>
+                        </div>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+
+        const emailResult = await sendEmailNotification(
+            normalizedEmail,
+            'Verify Your Email - Domain Dashboard',
+            emailHTML
+        );
+
+        if (emailResult.success) {
+            console.log(`[OTP] Sent OTP to ${normalizedEmail}`);
+            res.json({
+                message: "OTP sent successfully",
+                email: normalizedEmail
+            });
+        } else {
+            otpStore.delete(normalizedEmail); // Clean up if email fails
+            res.status(500).json({ error: "Failed to send OTP email. Please try again." });
+        }
+    });
+});
+
+// Verify OTP and complete registration
+app.post('/api/verify-otp', (req, res) => {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+        return res.status(400).json({ error: "Missing email or OTP" });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const storedData = otpStore.get(normalizedEmail);
+
+    if (!storedData) {
+        return res.status(400).json({ error: "OTP expired or not found. Please request a new one." });
+    }
+
+    // Check if OTP expired
+    if (Date.now() > storedData.expiresAt) {
+        otpStore.delete(normalizedEmail);
+        return res.status(400).json({ error: "OTP has expired. Please request a new one." });
+    }
+
+    // Verify OTP
+    if (storedData.otp !== otp.trim()) {
+        return res.status(400).json({ error: "Invalid OTP. Please try again." });
+    }
+
+    // OTP is valid, create user account
+    const { name, password } = storedData.userData;
+    const hashedPassword = bcrypt.hashSync(password, 8);
+
+    const sql = `INSERT INTO users (name, email, password) VALUES (?, ?, ?)`;
+    db.run(sql, [name, normalizedEmail, hashedPassword], function (err) {
+        if (err) {
+            console.error(err.message);
+            if (err.message.includes('UNIQUE constraint failed')) {
+                return res.status(400).json({ error: "Email already exists" });
+            }
+            return res.status(500).json({ error: "Database error" });
+        }
+
+        // Clear OTP from storage
+        otpStore.delete(normalizedEmail);
+
+        // Generate token for automatic login
+        const token = jwt.sign({ id: this.lastID, email: normalizedEmail }, SECRET_KEY, { expiresIn: '24h' });
+
+        console.log(`[Registration] User created with email verification: ${normalizedEmail}`);
+        res.json({
+            message: "Email verified and account created successfully",
+            token,
+            user: { name, email: normalizedEmail }
+        });
     });
 });
 
@@ -168,11 +366,39 @@ const authenticateToken = (req, res, next) => {
 // === Domain Endpoints ===
 
 // Get User's Domains
-app.get('/api/domains', authenticateToken, (req, res) => {
+app.get('/api/domains', authenticateToken, async (req, res) => {
+    // Check if demo account
+    if (req.user.id === -1 || req.user.isDemo) {
+        try {
+            const cachedDomains = await getAllCachedDomains();
+
+            // Transform cached domains to match user domain format
+            const domains = cachedDomains.map(row => ({
+                id: row.id,
+                user_id: -1,
+                name: row.name,
+                created: row.created_date,
+                created_date: row.created_date,
+                expires: row.expiry_date,
+                expiry_date: row.expiry_date,
+                registrar: row.registrar,
+                status: row.status,
+                full_details: row.full_details,
+                fullDetails: JSON.parse(row.full_details || '{}')
+            }));
+
+            return res.json(domains);
+        } catch (error) {
+            console.error('Error fetching cached domains:', error);
+            return res.status(500).json({ error: "Error loading demo data" });
+        }
+    }
+
+    // Regular user - fetch their domains
     const sql = `SELECT * FROM domains WHERE user_id = ?`;
     db.all(sql, [req.user.id], (err, rows) => {
         if (err) return res.status(500).json({ error: "Database error" });
-        
+
         // Parse the JSON string back to object
         const domains = rows.map(row => ({
             ...row,
@@ -184,6 +410,11 @@ app.get('/api/domains', authenticateToken, (req, res) => {
 
 // Save a Domain
 app.post('/api/domains', authenticateToken, (req, res) => {
+    // Prevent demo users from adding domains
+    if (req.user.id === -1 || req.user.isDemo) {
+        return res.status(403).json({ error: 'Demo account cannot add domains. Please create a free account to manage your own domains.' });
+    }
+
     const { name, created_date, expiry_date, registrar, status, fullDetails } = req.body;
 
     // Check if domain already exists for this user
@@ -222,6 +453,11 @@ app.post('/api/domains', authenticateToken, (req, res) => {
 
 // Delete a Domain
 app.delete('/api/domains/:id', authenticateToken, (req, res) => {
+    // Prevent demo users from deleting domains
+    if (req.user.id === -1 || req.user.isDemo) {
+        return res.status(403).json({ error: 'Demo account cannot delete domains. Please create a free account to manage your own domains.' });
+    }
+
     const sql = `DELETE FROM domains WHERE id = ? AND user_id = ?`;
     db.run(sql, [req.params.id, req.user.id], function(err) {
         if (err) return res.status(500).json({ error: "Database error" });

@@ -266,13 +266,18 @@ a, .link-value, .info-value, .detail-value {
   pointer-events: auto;
   display: flex;
   align-items: center;
+  transition: opacity 0.2s ease;
+}
+
+.nav-brand:hover {
+  opacity: 0.8;
 }
 
 .nav-logo {
-  height: 75px;
+  height: 100px;
   width: auto;
   object-fit: contain;
-  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.15));
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
   transition: transform 0.2s ease;
 }
 
@@ -1017,18 +1022,19 @@ a, .link-value, .info-value, .detail-value {
   justify-content: center;
   align-items: center;
   margin-bottom: 2rem;
+  padding: 1rem 0;
 }
 
 .auth-logo {
-  height: 80px;
+  height: 140px;
   width: auto;
   object-fit: contain;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.2));
   transition: transform 0.3s ease;
 }
 
 .auth-logo:hover {
-  transform: scale(1.05);
+  transform: scale(1.08);
 }
 
 .auth-header {
@@ -1129,6 +1135,32 @@ a, .link-value, .info-value, .detail-value {
   border-color: var(--text-secondary);
 }
 
+.demo-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.875rem;
+  background: linear-gradient(135deg, var(--accent-color), #0D9488);
+  border: none;
+  border-radius: var(--radius-md);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.2);
+}
+
+.demo-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(15, 118, 110, 0.3);
+}
+
+.demo-btn:active {
+  transform: translateY(0);
+}
+
 .toggle-auth {
   margin-top: 1.5rem;
   text-align: center;
@@ -1217,13 +1249,18 @@ a, .link-value, .info-value, .detail-value {
   align-items: center;
   margin-bottom: 1.5rem;
   padding-top: 1rem;
+  transition: opacity 0.2s ease;
+}
+
+.details-logo-container:hover {
+  opacity: 0.8;
 }
 
 .details-logo {
-  height: 60px;
+  height: 85px;
   width: auto;
   object-fit: contain;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
   transition: transform 0.2s ease;
 }
 
@@ -2098,7 +2135,7 @@ a, .link-value, .info-value, .detail-value {
   }
 
   .nav-logo {
-    height: 50px;
+    height: 65px;
   }
 
   .nav-right {
@@ -2211,7 +2248,7 @@ a, .link-value, .info-value, .detail-value {
   }
 
   .nav-logo {
-    height: 42px;
+    height: 55px;
   }
 
   .quick-add-btn,

@@ -269,7 +269,11 @@ app.post('/api/send-otp', async (req, res) => {
             });
         } else {
             otpStore.delete(normalizedEmail); // Clean up if email fails
-            res.status(500).json({ error: "Failed to send OTP email. Please try again." });
+            console.error(`[OTP] Failed to send email: ${emailResult.error}`);
+            res.status(500).json({
+                error: emailResult.error || "Failed to send OTP email. Please try again.",
+                details: "Check server email configuration"
+            });
         }
     });
 });

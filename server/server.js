@@ -9,7 +9,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
 const cron = require('node-cron');
-const { sendEmailNotification, sendSMSNotification, generateDomainExpiryEmail, generateSSLExpiryEmail } = require('./notificationService');
+const { sendEmailNotification, sendSMSNotification, generateDomainExpiryEmail, generateSSLExpiryEmail, emailTemplates } = require('./notificationService');
 const { isDomainCached, getCachedDomain, refreshDomainCache, getAllCachedDomains, shouldRefreshCache, TOP_50_DOMAINS } = require('./domainCache');
 
 const app = express();
@@ -214,46 +214,8 @@ app.post('/api/send-otp', async (req, res) => {
             expiresAt
         });
 
-        // Send OTP email
-        const emailHTML = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                    .header { background: linear-gradient(135deg, #0F766E, #0D9488); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-                    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-                    .otp-box { background: white; border: 2px dashed #0F766E; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px; }
-                    .otp-code { font-size: 32px; font-weight: bold; color: #0F766E; letter-spacing: 8px; }
-                    .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="header">
-                        <h1>🔐 Email Verification</h1>
-                    </div>
-                    <div class="content">
-                        <h2>Hello ${name}!</h2>
-                        <p>Thank you for signing up for Domain Dashboard. To complete your registration, please verify your email address.</p>
-
-                        <div class="otp-box">
-                            <p style="margin: 0; font-size: 14px; color: #666;">Your verification code is:</p>
-                            <div class="otp-code">${otp}</div>
-                            <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">This code will expire in 10 minutes</p>
-                        </div>
-
-                        <p>If you didn't request this code, please ignore this email.</p>
-
-                        <div class="footer">
-                            <p>© ${new Date().getFullYear()} Domain Dashboard - Your unified Domain management system</p>
-                        </div>
-                    </div>
-                </div>
-            </body>
-            </html>
-        `;
+        // Send OTP email using branded template
+        const emailHTML = emailTemplates.verificationEmail(otp, 10);
 
         const emailResult = await sendEmailNotification(
             normalizedEmail,
@@ -323,6 +285,17 @@ app.post('/api/verify-otp', (req, res) => {
 
         // Generate token for automatic login
         const token = jwt.sign({ id: this.lastID, email: normalizedEmail }, SECRET_KEY, { expiresIn: '24h' });
+
+        // Send welcome email (non-blocking)
+        sendEmailNotification(
+            normalizedEmail,
+            'Welcome to Domain Dashboard!',
+            emailTemplates.welcomeEmail(name)
+        ).then(() => {
+            console.log(`[Welcome] Welcome email sent to ${normalizedEmail}`);
+        }).catch(err => {
+            console.log(`[Welcome] Failed to send welcome email: ${err.message}`);
+        });
 
         console.log(`[Registration] User created with email verification: ${normalizedEmail}`);
         res.json({

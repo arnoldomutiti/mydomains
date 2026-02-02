@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const twilio = require('twilio');
+const emailTemplates = require('./emailTemplates');
 
 // Email transporter configuration
 const createEmailTransporter = () => {
@@ -86,137 +87,31 @@ async function sendSMSNotification(to, message) {
   }
 }
 
-// Generate email HTML for domain expiry
-function generateDomainExpiryEmail(domains) {
-  const domainList = domains.map(d => `
-    <tr>
-      <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">
-        <strong>${d.name}</strong>
-      </td>
-      <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">
-        ${d.daysUntilExpiry} days
-      </td>
-      <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">
-        ${d.expiryDate}
-      </td>
-    </tr>
-  `).join('');
-
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #2563eb; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
-        .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; }
-        th { background: #f3f4f6; padding: 12px; text-align: left; font-weight: 600; }
-        .footer { margin-top: 20px; font-size: 12px; color: #6b7280; text-align: center; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0;">⚠️ Domain Expiry Alert</h1>
-        </div>
-        <div class="content">
-          <p>Hello,</p>
-          <p>The following domains in your portfolio are expiring soon:</p>
-
-          <table>
-            <thead>
-              <tr>
-                <th>Domain</th>
-                <th>Days Remaining</th>
-                <th>Expiry Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${domainList}
-            </tbody>
-          </table>
-
-          <p>Please renew these domains to avoid losing them.</p>
-          <p><strong>Domain Dashboard</strong></p>
-        </div>
-        <div class="footer">
-          <p>This is an automated notification from Domain Dashboard</p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+// Generate email HTML for domain expiry (using branded templates)
+function generateDomainExpiryEmail(domains, userName = null) {
+  const formattedDomains = domains.map(d => ({
+    name: d.name,
+    daysRemaining: d.daysUntilExpiry,
+    expiryDate: d.expiryDate
+  }));
+  return emailTemplates.domainExpiryEmail(formattedDomains, userName);
 }
 
-// Generate email HTML for SSL expiry
-function generateSSLExpiryEmail(domains) {
-  const domainList = domains.map(d => `
-    <tr>
-      <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">
-        <strong>${d.name}</strong>
-      </td>
-      <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">
-        ${d.daysUntilExpiry} days
-      </td>
-      <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">
-        ${d.expiryDate}
-      </td>
-    </tr>
-  `).join('');
-
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #dc2626; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
-        .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; }
-        th { background: #f3f4f6; padding: 12px; text-align: left; font-weight: 600; }
-        .footer { margin-top: 20px; font-size: 12px; color: #6b7280; text-align: center; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1 style="margin: 0;">🔒 SSL Certificate Expiry Alert</h1>
-        </div>
-        <div class="content">
-          <p>Hello,</p>
-          <p>The following SSL certificates are expiring soon:</p>
-
-          <table>
-            <thead>
-              <tr>
-                <th>Domain</th>
-                <th>Days Remaining</th>
-                <th>Expiry Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${domainList}
-            </tbody>
-          </table>
-
-          <p>Please renew these SSL certificates to maintain secure connections.</p>
-          <p><strong>Domain Dashboard</strong></p>
-        </div>
-        <div class="footer">
-          <p>This is an automated notification from Domain Dashboard</p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+// Generate email HTML for SSL expiry (using branded templates)
+function generateSSLExpiryEmail(domains, userName = null) {
+  const formattedCerts = domains.map(d => ({
+    domain: d.name,
+    daysRemaining: d.daysUntilExpiry,
+    expiryDate: d.expiryDate
+  }));
+  return emailTemplates.sslExpiryEmail(formattedCerts, userName);
 }
 
 module.exports = {
   sendEmailNotification,
   sendSMSNotification,
   generateDomainExpiryEmail,
-  generateSSLExpiryEmail
+  generateSSLExpiryEmail,
+  // Export all email templates for use in other parts of the app
+  emailTemplates
 };

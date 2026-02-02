@@ -2291,9 +2291,6 @@ function AddDomainModal({ isOpen, onClose, onAddDomain, token, showModal }) {
 
         if (!saveRes.ok) {
           const errorData = await saveRes.json();
-          if (saveRes.status === 409) {
-            throw new Error("Domain already exists");
-          }
           throw new Error(errorData.error || "Database Save Failed");
         }
 

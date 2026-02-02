@@ -394,16 +394,22 @@ app.post('/api/domains', authenticateToken, (req, res) => {
 
     const { name, created_date, expiry_date, registrar, status, fullDetails } = req.body;
 
-    // Check if domain already exists for this user
-    const checkSql = `SELECT id FROM domains WHERE user_id = ? AND name = ?`;
-    db.get(checkSql, [req.user.id, name], (err, existing) => {
+    // Normalize domain name (lowercase, remove www., trim whitespace)
+    const normalizedName = name.toLowerCase().trim().replace(/^www\./, '');
+
+    // Check if domain already exists for this user (case-insensitive)
+    const checkSql = `SELECT id, name FROM domains WHERE user_id = ? AND LOWER(REPLACE(name, 'www.', '')) = ?`;
+    db.get(checkSql, [req.user.id, normalizedName], (err, existing) => {
         if (err) {
             console.error('Error checking for duplicate:', err);
             return res.status(500).json({ error: 'Database error' });
         }
 
         if (existing) {
-            return res.status(409).json({ error: 'Domain already exists', domainId: existing.id });
+            return res.status(409).json({
+                error: `This domain is already in your dashboard as "${existing.name}"`,
+                domainId: existing.id
+            });
         }
 
         // Insert the new domain

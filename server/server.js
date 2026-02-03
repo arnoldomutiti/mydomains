@@ -22,9 +22,22 @@ const SECRET_KEY = process.env.JWT_SECRET || "supervalidsecrekey123"; // In prod
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-// CORS configuration
+// CORS configuration - allow both dev and production origins
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://app.domain-dashboard.com',
+  'http://app.domain-dashboard.com'
+];
+
 app.use(cors({
-  origin: FRONTEND_URL,
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
   credentials: true
 }));
 app.use(express.json());

@@ -325,8 +325,8 @@ app.get('/api/auth/google/callback',
       { expiresIn: '24h' }
     );
 
-    // Redirect to frontend with token
-    res.redirect(`${FRONTEND_URL}/auth/callback?token=${token}&name=${encodeURIComponent(req.user.name)}&email=${encodeURIComponent(req.user.email)}`);
+    // Redirect to frontend with token (root URL, no /auth/callback path needed)
+    res.redirect(`${FRONTEND_URL}/?token=${token}&name=${encodeURIComponent(req.user.name)}&email=${encodeURIComponent(req.user.email)}`);
   }
 );
 

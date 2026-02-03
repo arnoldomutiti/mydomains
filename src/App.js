@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { ExternalLink, Building2, User, Shield, Lock, ArrowLeft, Network, Moon, Sun, Globe, Search, Database, Clock, Zap, FileSearch, Bug, Plus, AlertCircle, Trash2, LayoutDashboard, Bell, Download, Filter, ChevronDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import './App.css';
+import API_BASE_URL from './config';
 
 // --- External Tools Data ---
 const EXTERNAL_TOOLS = [
@@ -309,7 +310,7 @@ function NotificationDropdown({ domains, isOpen: externalIsOpen, onToggle }) {
       const sslResults = {};
       for (const domain of domains) {
         try {
-          const res = await fetch(`http://localhost:5000/api/ssl/${domain.name}`);
+          const res = await fetch(`${API_BASE_URL}/api/ssl/${domain.name}`);
           const data = await res.json();
           if (res.ok) {
             sslResults[domain.name] = data;
@@ -469,7 +470,7 @@ function NotificationPreferences({ isOpen, onClose, user }) {
   const fetchPreferences = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5000/api/notifications/preferences', {
+      const res = await fetch(`${API_BASE_URL}/api/notifications/preferences`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -488,7 +489,7 @@ function NotificationPreferences({ isOpen, onClose, user }) {
     setMessage({ text: '', type: '' });
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5000/api/notifications/preferences', {
+      const res = await fetch(`${API_BASE_URL}/api/notifications/preferences`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -519,7 +520,7 @@ function NotificationPreferences({ isOpen, onClose, user }) {
     setMessage({ text: '', type: '' });
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5000/api/notifications/test', {
+      const res = await fetch(`${API_BASE_URL}/api/notifications/test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -550,7 +551,7 @@ function NotificationPreferences({ isOpen, onClose, user }) {
     setMessage({ text: '', type: '' });
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5000/api/notifications/test', {
+      const res = await fetch(`${API_BASE_URL}/api/notifications/test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -678,7 +679,7 @@ function SSLCard({ domain }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`http://localhost:5000/api/ssl/${domain}`);
+      const res = await fetch(`${API_BASE_URL}/api/ssl/${domain}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -779,7 +780,7 @@ function PageSpeedCard({ domain }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`http://localhost:5000/api/pagespeed/${domain}`);
+      const res = await fetch(`${API_BASE_URL}/api/pagespeed/${domain}`);
       if (!res.ok) {
           const errText = await res.text();
           throw new Error(`Server Error: ${res.status} ${errText}`);
@@ -1129,7 +1130,7 @@ export default function App() {
       const sslResults = {};
       for (const domain of domains) {
         try {
-          const res = await fetch(`http://localhost:5000/api/ssl/${domain.name}`);
+          const res = await fetch(`${API_BASE_URL}/api/ssl/${domain.name}`);
           const data = await res.json();
           if (res.ok) {
             sslResults[domain.name] = data;
@@ -1149,7 +1150,7 @@ export default function App() {
   const fetchDomains = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5000/api/domains', {
+      const res = await fetch(`${API_BASE_URL}/api/domains`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -1219,7 +1220,7 @@ export default function App() {
     // Regular login with email and password
     const email = emailOrObj;
     try {
-      const res = await fetch('http://localhost:5000/api/login', {
+      const res = await fetch(`${API_BASE_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -1242,7 +1243,7 @@ export default function App() {
 
   const handleRegisterObj = async (name, email, password) => {
     try {
-      const res = await fetch('http://localhost:5000/api/register', {
+      const res = await fetch(`${API_BASE_URL}/api/register`, {
          method: 'POST',
          headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify({ name, email, password })
@@ -1283,7 +1284,7 @@ export default function App() {
       async () => {
         try {
           const token = localStorage.getItem('token');
-          const res = await fetch(`http://localhost:5000/api/domains/${domainId}`, {
+          const res = await fetch(`${API_BASE_URL}/api/domains/${domainId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -1309,7 +1310,7 @@ export default function App() {
 
     for (const domainData of importedDomains) {
       try {
-        const res = await fetch(`http://localhost:5000/api/whois/${domainData.name}`);
+        const res = await fetch(`${API_BASE_URL}/api/whois/${domainData.name}`);
         const data = await res.json();
 
         if (data.status !== 1 || data.domain_registered === 'no') {
@@ -1326,7 +1327,7 @@ export default function App() {
           fullDetails: data
         };
 
-        const saveRes = await fetch('http://localhost:5000/api/domains', {
+        const saveRes = await fetch(`${API_BASE_URL}/api/domains`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1868,7 +1869,7 @@ function AuthPage({ onLogin, onRegister, darkMode, setDarkMode }) {
     } else {
       // Registration: Send OTP first
       try {
-        const response = await fetch('http://localhost:5000/api/send-otp', {
+        const response = await fetch(`${API_BASE_URL}/api/send-otp`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1908,7 +1909,7 @@ function AuthPage({ onLogin, onRegister, darkMode, setDarkMode }) {
     setErrors({});
 
     try {
-      const response = await fetch('http://localhost:5000/api/verify-otp', {
+      const response = await fetch(`${API_BASE_URL}/api/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1944,7 +1945,7 @@ function AuthPage({ onLogin, onRegister, darkMode, setDarkMode }) {
 
   const handleResendOTP = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/send-otp', {
+      const response = await fetch(`${API_BASE_URL}/api/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1970,7 +1971,7 @@ function AuthPage({ onLogin, onRegister, darkMode, setDarkMode }) {
 
   const handleDemoLogin = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/demo-login', {
+      const response = await fetch(`${API_BASE_URL}/api/demo-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -2123,7 +2124,7 @@ function AuthPage({ onLogin, onRegister, darkMode, setDarkMode }) {
 
           <div className="divider">or sign in with</div>
 
-          <button className="social-btn" onClick={() => window.location.href = 'http://localhost:5000/api/auth/google'}>
+          <button className="social-btn" onClick={() => window.location.href = `${API_BASE_URL}/api/auth/google`}>
              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
@@ -2264,7 +2265,7 @@ function AddDomainModal({ isOpen, onClose, onAddDomain, token, showModal }) {
       setLogs(prev => [...prev, { name: domainName, status: 'Testing...', type: 'loading' }]);
 
       try {
-        const res = await fetch(`http://localhost:5000/api/whois/${domainName}`);
+        const res = await fetch(`${API_BASE_URL}/api/whois/${domainName}`);
         const data = await res.json();
 
         if (data.status !== 1 || data.domain_registered === 'no') {
@@ -2280,7 +2281,7 @@ function AddDomainModal({ isOpen, onClose, onAddDomain, token, showModal }) {
             fullDetails: data
         };
 
-        const saveRes = await fetch('http://localhost:5000/api/domains', {
+        const saveRes = await fetch(`${API_BASE_URL}/api/domains`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

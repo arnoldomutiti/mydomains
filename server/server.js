@@ -18,9 +18,13 @@ const WHOXY_API_KEY = process.env.WHOXY_API_KEY;
 const PAGESPEED_API_KEY = process.env.PAGESPEED_API_KEY;
 const SECRET_KEY = process.env.JWT_SECRET || "supervalidsecrekey123"; // In prod, use .env
 
+// Base URLs (supports both local dev and production)
+const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+
 // CORS configuration
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: FRONTEND_URL,
   credentials: true
 }));
 app.use(express.json());
@@ -55,7 +59,7 @@ passport.deserializeUser((id, done) => {
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: "http://localhost:5000/api/auth/google/callback"
+    callbackURL: `${BASE_URL}/api/auth/google/callback`
   },
   (accessToken, refreshToken, profile, done) => {
     // Normalize email to lowercase for case-insensitive lookup
@@ -312,7 +316,7 @@ app.get('/api/auth/google',
 );
 
 app.get('/api/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: 'http://localhost:3000' }),
+  passport.authenticate('google', { failureRedirect: FRONTEND_URL }),
   (req, res) => {
     // Successful authentication
     const token = jwt.sign(
@@ -322,7 +326,7 @@ app.get('/api/auth/google/callback',
     );
 
     // Redirect to frontend with token
-    res.redirect(`http://localhost:3000/auth/callback?token=${token}&name=${encodeURIComponent(req.user.name)}&email=${encodeURIComponent(req.user.email)}`);
+    res.redirect(`${FRONTEND_URL}/auth/callback?token=${token}&name=${encodeURIComponent(req.user.name)}&email=${encodeURIComponent(req.user.email)}`);
   }
 );
 

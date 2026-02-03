@@ -18,26 +18,9 @@ const WHOXY_API_KEY = process.env.WHOXY_API_KEY;
 const PAGESPEED_API_KEY = process.env.PAGESPEED_API_KEY;
 const SECRET_KEY = process.env.JWT_SECRET || "supervalidsecrekey123"; // In prod, use .env
 
-// Base URLs (supports both local dev and production)
-const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
-
-// CORS configuration - allow both dev and production origins
-const allowedOrigins = [
-  'http://localhost:3000',
-  'https://app.domain-dashboard.com',
-  'http://app.domain-dashboard.com'
-];
-
+// CORS configuration
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(null, false);
-  },
+  origin: 'http://localhost:3000',
   credentials: true
 }));
 app.use(express.json());
@@ -72,7 +55,7 @@ passport.deserializeUser((id, done) => {
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: `${BASE_URL}/api/auth/google/callback`
+    callbackURL: "http://localhost:5000/api/auth/google/callback"
   },
   (accessToken, refreshToken, profile, done) => {
     // Normalize email to lowercase for case-insensitive lookup
@@ -329,7 +312,7 @@ app.get('/api/auth/google',
 );
 
 app.get('/api/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: FRONTEND_URL }),
+  passport.authenticate('google', { failureRedirect: 'http://localhost:3000' }),
   (req, res) => {
     // Successful authentication
     const token = jwt.sign(
@@ -338,8 +321,8 @@ app.get('/api/auth/google/callback',
       { expiresIn: '24h' }
     );
 
-    // Redirect to frontend with token (root URL, no /auth/callback path needed)
-    res.redirect(`${FRONTEND_URL}/?token=${token}&name=${encodeURIComponent(req.user.name)}&email=${encodeURIComponent(req.user.email)}`);
+    // Redirect to frontend with token
+    res.redirect(`http://localhost:3000/auth/callback?token=${token}&name=${encodeURIComponent(req.user.name)}&email=${encodeURIComponent(req.user.email)}`);
   }
 );
 
@@ -411,22 +394,16 @@ app.post('/api/domains', authenticateToken, (req, res) => {
 
     const { name, created_date, expiry_date, registrar, status, fullDetails } = req.body;
 
-    // Normalize domain name (lowercase, remove www., trim whitespace)
-    const normalizedName = name.toLowerCase().trim().replace(/^www\./, '');
-
-    // Check if domain already exists for this user (case-insensitive)
-    const checkSql = `SELECT id, name FROM domains WHERE user_id = ? AND LOWER(REPLACE(name, 'www.', '')) = ?`;
-    db.get(checkSql, [req.user.id, normalizedName], (err, existing) => {
+    // Check if domain already exists for this user
+    const checkSql = `SELECT id FROM domains WHERE user_id = ? AND name = ?`;
+    db.get(checkSql, [req.user.id, name], (err, existing) => {
         if (err) {
             console.error('Error checking for duplicate:', err);
             return res.status(500).json({ error: 'Database error' });
         }
 
         if (existing) {
-            return res.status(409).json({
-                error: `This domain is already in your dashboard as "${existing.name}"`,
-                domainId: existing.id
-            });
+            return res.status(409).json({ error: 'Domain already exists', domainId: existing.id });
         }
 
         // Insert the new domain

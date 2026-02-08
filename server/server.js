@@ -12,18 +12,29 @@ const cron = require('node-cron');
 const { sendEmailNotification, sendSMSNotification, generateDomainExpiryEmail, generateSSLExpiryEmail, emailTemplates } = require('./notificationService');
 const { isDomainCached, getCachedDomain, refreshDomainCache, getAllCachedDomains, shouldRefreshCache, TOP_50_DOMAINS } = require('./domainCache');
 
+const path = require('path');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const BASE_URL = process.env.BASE_URL || (NODE_ENV === 'production' ? '' : 'http://localhost:3000');
 const WHOXY_API_KEY = process.env.WHOXY_API_KEY;
 const PAGESPEED_API_KEY = process.env.PAGESPEED_API_KEY;
 const SECRET_KEY = process.env.JWT_SECRET || "supervalidsecrekey123"; // In prod, use .env
 
 // CORS configuration
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: NODE_ENV === 'production'
+    ? (BASE_URL || true)
+    : 'http://localhost:3000',
   credentials: true
 }));
 app.use(express.json());
+
+// In production, serve the React build
+if (NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, 'public')));
+}
 
 // Session middleware
 app.use(session({
@@ -31,10 +42,16 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false, // Set to true in production with HTTPS
+    secure: NODE_ENV === 'production',
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
+  },
+  proxy: NODE_ENV === 'production' // Trust the nginx reverse proxy
 }));
+
+// Trust proxy in production (behind nginx)
+if (NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
 // Initialize Passport
 app.use(passport.initialize());
@@ -52,10 +69,13 @@ passport.deserializeUser((id, done) => {
 });
 
 // Google OAuth Strategy
+const googleCallbackURL = process.env.GOOGLE_CALLBACK_URL ||
+  (NODE_ENV === 'production' ? `${BASE_URL}/api/auth/google/callback` : 'http://localhost:5000/api/auth/google/callback');
+
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: "http://localhost:5000/api/auth/google/callback"
+    callbackURL: googleCallbackURL
   },
   (accessToken, refreshToken, profile, done) => {
     // Normalize email to lowercase for case-insensitive lookup
@@ -311,8 +331,10 @@ app.get('/api/auth/google',
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
 
+const frontendURL = NODE_ENV === 'production' ? (BASE_URL || '') : 'http://localhost:3000';
+
 app.get('/api/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: 'http://localhost:3000' }),
+  passport.authenticate('google', { failureRedirect: frontendURL }),
   (req, res) => {
     // Successful authentication
     const token = jwt.sign(
@@ -322,7 +344,7 @@ app.get('/api/auth/google/callback',
     );
 
     // Redirect to frontend with token
-    res.redirect(`http://localhost:3000/auth/callback?token=${token}&name=${encodeURIComponent(req.user.name)}&email=${encodeURIComponent(req.user.email)}`);
+    res.redirect(`${frontendURL}/auth/callback?token=${token}&name=${encodeURIComponent(req.user.name)}&email=${encodeURIComponent(req.user.email)}`);
   }
 );
 
@@ -865,8 +887,15 @@ cron.schedule('0 8 * * *', async () => {
     }
 })();
 
+// In production, serve React app for all non-API routes (SPA routing)
+if (NODE_ENV === 'production') {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  });
+}
+
 app.listen(PORT, () => {
-    console.log(`\n🚀 Server running on port ${PORT}`);
+    console.log(`\n🚀 Server running on port ${PORT} (${NODE_ENV})`);
     console.log('📅 [Cron] Daily notification job scheduled for 9:00 AM');
     console.log('📅 [Cron] Daily cache refresh scheduled for 8:00 AM');
     console.log(`📦 Top ${TOP_50_DOMAINS.length} domains will be cached for instant access\n`);

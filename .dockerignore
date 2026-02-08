@@ -1,0 +1,10 @@
+node_modules
+server/node_modules
+build
+server/database.sqlite
+server/.env
+server/.env.*
+.git
+.gitignore
+*.md
+Images/

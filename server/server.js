@@ -23,10 +23,19 @@ const PAGESPEED_API_KEY = process.env.PAGESPEED_API_KEY;
 const SECRET_KEY = process.env.JWT_SECRET || "supervalidsecrekey123"; // In prod, use .env
 
 // CORS configuration
+const allowedOrigins = NODE_ENV === 'production'
+  ? [BASE_URL, 'https://domain-dashboard.com', 'https://www.domain-dashboard.com'].filter(Boolean)
+  : ['http://localhost:3000'];
+
 app.use(cors({
-  origin: NODE_ENV === 'production'
-    ? (BASE_URL || true)
-    : 'http://localhost:3000',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, server-to-server, curl)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true); // In production behind nginx, allow all proxied requests
+    }
+  },
   credentials: true
 }));
 app.use(express.json());
